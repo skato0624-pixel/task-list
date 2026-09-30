@@ -852,7 +852,7 @@ function renderHolidayDlg(){
   $('hd-src').textContent=on?`祝日データはインターネット上の公開データ（${on.doc.source||'holiday_jp'}${on.doc.version?' v'+on.doc.version:''}／内閣府の発表に基づく）から${on.doc.fetchedAt?on.doc.fetchedAt.slice(0,10).replace(/-/g,'/')+'に':''}取得したものです（${on.doc.from}〜${on.doc.to}年、振替休日・国民の休日を含む）。範囲外の年は祝日法の規則から計算して表示します。`
     :'祝日データがまだ取り込まれていないため、祝日法の規則から計算して表示しています（振替休日・国民の休日を含む。春分の日・秋分の日は計算上の日付）。';
   const y=new Date().getFullYear();const rows=[];
-  for(const yy of [y,y+1])for(const [d,n] of [...jpHolidays(yy)].sort((a,b)=>a[0].localeCompare(b[0])))rows.push(`<li><span class="d">${yy}/${fmt(d).replace(/^\d+\//,'')}（${WD[parse(d).getDay()]}）</span><span class="n">${n}</span></li>`);
+  for(const yy of [y,y+1])for(const [d,n] of [...jpHolidays(yy)].sort((a,b)=>a[0].localeCompare(b[0])))rows.push(`<li><span class="d">${yy}/${parse(d).getMonth()+1}/${parse(d).getDate()}（${WD[parse(d).getDay()]}）</span><span class="n">${n}</span></li>`);
   $('hd-jpsum').textContent=`祝日の一覧を見る（${y}年・${y+1}年）`;
   $('hd-jplist').innerHTML=rows.join('');
   const hs=[...S.holidays].sort((a,b)=>(a.start||'').localeCompare(b.start||''));
