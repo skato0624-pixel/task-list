@@ -182,7 +182,23 @@ label.f{display:grid;gap:4px;font-size:.78rem;color:var(--muted)}
 .gscale{position:relative;flex:none;height:46px}
 .gm{position:absolute;top:0;height:22px;padding:3px 6px;font-size:.76rem;font-weight:700;border-left:1px solid var(--line);white-space:nowrap;overflow:hidden}
 .gd{position:absolute;top:22px;height:24px;display:grid;place-items:center;font-size:.7rem;color:var(--muted);font-family:var(--f-mono);border-left:1px solid color-mix(in srgb,var(--line) 60%,transparent)}
-.gd.sat{color:var(--doing)} .gd.sun{color:var(--danger)}
+.gd.sat{color:var(--doing)} .gd.sun,.gd.jp{color:var(--danger);font-weight:700} .gd.co{color:var(--g3);font-weight:700}
+.glayer .we.jp{background:color-mix(in srgb,var(--danger) 9%,transparent)}
+.glayer .we.co{background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--g3) 16%,transparent) 0 4px,transparent 4px 8px)}
+.glegend i.lg-jp{background:color-mix(in srgb,var(--danger) 25%,transparent)}
+.glegend i.lg-co{background:repeating-linear-gradient(135deg,var(--g3) 0 2px,transparent 2px 4px)}
+.hlist{list-style:none;margin:0;padding:0;display:grid;gap:2px;max-height:220px;overflow:auto;border:1px solid var(--line);border-radius:6px}
+.hlist li{display:flex;align-items:center;gap:10px;padding:6px 10px;border-bottom:1px solid var(--line);font-size:.88rem}
+.hlist li:last-child{border-bottom:0}
+.hlist .d{font-family:var(--f-mono);font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--muted);font-size:.8rem;min-width:9.5em}
+.hlist .n{flex:1;min-width:0;overflow-wrap:anywhere}
+.hlist .none{color:var(--muted)}
+.hadd{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.hadd .f-name{grid-column:1/-1}
+.hsec{display:grid;gap:8px}
+.hsec h3{margin:0;font-size:.9rem}
+.hsec .hint{margin:0;font-size:.78rem;color:var(--muted)}
+details.jpl summary{cursor:pointer;font-size:.85rem;color:var(--muted)}
 .gd.today{background:var(--accent);color:var(--accent-fg);font-weight:700;border-radius:4px}
 .gbody{position:relative}
 .glayer{position:absolute;top:0;bottom:0;left:var(--LW);pointer-events:none}
@@ -324,6 +340,29 @@ label.f{display:grid;gap:4px;font-size:.78rem;color:var(--muted)}
   </form>
 </div>
 
+<div class="ov" id="hd" hidden>
+  <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="hd-h">
+    <h2 id="hd-h">休日設定</h2>
+    <div class="hsec">
+      <label class="chk" style="color:var(--fg);font-size:.9rem"><input type="checkbox" id="hd-jp">日本の祝日をカレンダーに表示する</label>
+      <p class="hint">振替休日と国民の休日も含みます。春分の日・秋分の日は計算で求めた日付です（正式な日付は毎年2月に官報で発表されます）。</p>
+      <details class="jpl"><summary id="hd-jpsum">祝日の一覧を見る</summary><ul class="hlist" id="hd-jplist" style="margin-top:8px"></ul></details>
+    </div>
+    <div class="hsec">
+      <h3>会社休日</h3>
+      <ul class="hlist" id="hd-list"></ul>
+      <form class="hadd" id="hd-form">
+        <label class="f f-name">名前<input class="in" id="hd-name" maxlength="40" placeholder="例：年末年始休暇、創立記念日" required></label>
+        <label class="f">開始日<input class="in mono" type="date" id="hd-start" required></label>
+        <label class="f">終了日（1日だけなら空欄）<input class="in mono" type="date" id="hd-end"></label>
+        <button class="btn pri" type="submit" style="grid-column:1/-1">会社休日を追加</button>
+      </form>
+      <p class="err" id="hd-err"></p>
+    </div>
+    <div class="dlg-f"><div class="r"><button type="button" class="btn" id="hd-close">閉じる</button></div></div>
+  </div>
+</div>
+
 <div class="toast" id="toast" hidden></div>
 
 <script>
@@ -333,7 +372,7 @@ const SL=Object.fromEntries(STATUSES.map(s=>[s.k,s.l]));
 const SORD={doing:0,todo:1,hold:2,done:3};
 const NOGROUP='__none';
 const $=id=>document.getElementById(id);
-const S={groups:[],tasks:[],fg:'all',fs:'all',sort:'end',db:null,mode:'loading',gotG:false,gotT:false,readOnly:false};
+const S={groups:[],tasks:[],holidays:[],settings:[],fg:'all',fs:'all',sort:'end',db:null,mode:'loading',gotG:false,gotT:false,readOnly:false};
 const LS={get(k,d){try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
 const closed=new Set(LS.get('tl-closed',[]));
 const openSubs=new Set(LS.get('tl-subs',[]));
@@ -356,7 +395,7 @@ function toast(msg){const t=$('toast');t.textContent=msg;t.hidden=false;clearTim
 
 /* ---------- data layer ---------- */
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,8);
-function saveLocal(){LS.set('tl-local',{groups:S.groups,tasks:S.tasks})}
+function saveLocal(){LS.set('tl-local',{groups:S.groups,tasks:S.tasks,holidays:S.holidays,settings:S.settings})}
 function writeFail(e){
   if(e&&e.code==='invalid_argument'){S.readOnly=true;applyRO();toast('この表示では変更を保存できません（閲覧のみ）。');}
   else if(e&&e.code==='quota_exceeded'){toast('保存できる件数の上限に達しました。不要なタスクを削除してください。');}
@@ -378,7 +417,7 @@ function strip(o){const r={...o};delete r.id;return r}
 
 function startLocal(){
   S.mode='local';const d=LS.get('tl-local',null);
-  if(d){S.groups=d.groups||[];S.tasks=d.tasks||[]}
+  if(d){S.groups=d.groups||[];S.tasks=d.tasks||[];S.holidays=d.holidays||[];S.settings=d.settings||[]}
   const n=$('notice');n.hidden=false;n.textContent='共有の保存先に接続できないため、変更はこのブラウザにのみ保存されます。';
   render();
 }
@@ -391,6 +430,8 @@ async function init(){
   const onErr=e=>{if(e&&e.code==='revoked'){S.readOnly=true;applyRO()}};
   db.collection('groups').onSnapshot(s=>{S.groups=s.docs.map(d=>({id:d.id,...d.data()}));S.gotG=true;render()},onErr);
   db.collection('tasks').onSnapshot(s=>{S.tasks=s.docs.map(d=>({id:d.id,...d.data()}));S.gotT=true;render()},onErr);
+  db.collection('holidays').onSnapshot(s=>{S.holidays=s.docs.map(d=>({id:d.id,...d.data()}));render();if(!$('hd').hidden)renderHolidayDlg()},onErr);
+  db.collection('settings').onSnapshot(s=>{S.settings=s.docs.map(d=>({id:d.id,...d.data()}));render();if(!$('hd').hidden)renderHolidayDlg()},onErr);
 }
 function applyRO(){document.querySelectorAll('#qa input,#qa select,#qa button,#gadd input,#gadd button').forEach(el=>el.disabled=S.readOnly);render()}
 
@@ -425,13 +466,50 @@ function meta(t){
   }
   return {html:out.join(''),over};
 }
+/* ---------- holidays ----------
+   Japanese national holidays computed from the 祝日法 rules (2020+), incl. 振替休日 and 国民の休日.
+   春分・秋分 use the standard approximation formula; the official dates are announced each February. */
+const jpCache={};
+function nthMon(y,m,n){const d=new Date(y,m-1,1);const off=(8-d.getDay())%7;return ymd(new Date(y,m-1,1+off+(n-1)*7))}
+function jpHolidays(y){
+  if(jpCache[y])return jpCache[y];
+  const h=new Map();const add=(m,d,n)=>h.set(`${y}-${pad(m)}-${pad(d)}`,n);
+  const e=y-1980,shun=Math.floor(20.8431+0.242194*e-Math.floor(e/4)),shu=Math.floor(23.2488+0.242194*e-Math.floor(e/4));
+  add(1,1,'元日');h.set(nthMon(y,1,2),'成人の日');add(2,11,'建国記念の日');add(2,23,'天皇誕生日');add(3,shun,'春分の日');
+  add(4,29,'昭和の日');add(5,3,'憲法記念日');add(5,4,'みどりの日');add(5,5,'こどもの日');
+  if(y===2020){add(7,23,'海の日');add(7,24,'スポーツの日');add(8,10,'山の日')}
+  else if(y===2021){add(7,22,'海の日');add(7,23,'スポーツの日');add(8,8,'山の日')}
+  else{h.set(nthMon(y,7,3),'海の日');add(8,11,'山の日');h.set(nthMon(y,10,2),'スポーツの日')}
+  h.set(nthMon(y,9,3),'敬老の日');add(9,shu,'秋分の日');add(11,3,'文化の日');add(11,23,'勤労感謝の日');
+  // 国民の休日: a weekday sandwiched between two holidays
+  for(const k of [...h.keys()]){const a=addDays(k,1),b=addDays(k,2);if(h.has(b)&&!h.has(a)&&parse(a).getDay()!==0)h.set(a,'国民の休日')}
+  // 振替休日: a holiday on Sunday moves to the next non-holiday day
+  for(const k of [...h.keys()].sort()){if(parse(k).getDay()===0){let d=addDays(k,1);while(h.has(d))d=addDays(d,1);h.set(d,'振替休日')}}
+  return jpCache[y]=h;
+}
+const calCfg=()=>S.settings.find(x=>x.id==='calendar')||{};
+const jpOn=()=>calCfg().jpHolidays!==false;
+function companyHolidayMap(){
+  const m=new Map();
+  for(const h of S.holidays){if(!h.start)continue;const e=h.end&&h.end>=h.start?h.end:h.start;
+    for(let d=h.start,i=0;d<=e&&i<400;d=addDays(d,1),i++)m.set(d,h.name||'会社休日')}
+  return m;
+}
+// kind: 'sat' | 'sun' | 'jp' | 'co' | null (workday)
+function dayInfo(s,co){
+  const c=co.get(s);if(c)return {kind:'co',name:c};
+  if(jpOn()){const n=jpHolidays(+s.slice(0,4)).get(s);if(n)return {kind:'jp',name:n}}
+  const w=parse(s).getDay();return {kind:w===6?'sat':w===0?'sun':null,name:''};
+}
+function workdays(a,b){const co=companyHolidayMap();let n=0;for(let d=a,i=0;d<=b&&i<1500;d=addDays(d,1),i++)if(!dayInfo(d,co).kind)n++;return n}
+
 function span(t,over){
   if(!(t.start&&t.end))return '<div class="span"></div>';
   const total=diff(t.start,t.end)+1;
   let el=Math.min(Math.max(diff(t.start,TODAY)+1,0),total);
   if(t.status==='done')el=total;
   const pct=total>0?Math.round(el/total*100):0;
-  return `<div class="span st-${t.status}"><div class="span-lbl"><span>期間 ${total}日</span><span class="mono">${t.status==='done'?'完了':el+'/'+total}</span></div><div class="bar${over?' over':''}" aria-hidden="true"><i style="width:${pct}%"></i></div></div>`;
+  return `<div class="span st-${t.status}"><div class="span-lbl"><span>期間 ${total}日（稼働 ${workdays(t.start,t.end)}日）</span><span class="mono">${t.status==='done'?'完了':el+'/'+total}</span></div><div class="bar${over?' over':''}" aria-hidden="true"><i style="width:${pct}%"></i></div></div>`;
 }
 function statusOpts(sel){return STATUSES.map(s=>`<option value="${s.k}"${s.k===sel?' selected':''}>${s.l}</option>`).join('')}
 function groupOpts(sel){return `<option value="">未分類</option>`+groupsSorted().map(g=>`<option value="${esc(g.id)}"${g.id===sel?' selected':''}>${esc(g.name)}</option>`).join('')}
@@ -682,7 +760,7 @@ function renderGantt(list,gl){
   let r0=addDays(ds[0],-3),r1=addDays(ds[ds.length-1],10);
   {const d=parse(r0);d.setDate(d.getDate()-((d.getDay()+6)%7));r0=ymd(d)} // start on Monday
   if(diff(r0,r1)<41)r1=addDays(r0,41);
-  const N=diff(r0,r1)+1,W=N*DW;
+  const N=diff(r0,r1)+1,W=N*DW;const co=companyHolidayMap();
   const x=s=>diff(r0,s)*DW;
 
   // header
@@ -693,10 +771,11 @@ function renderGantt(list,gl){
       let n=0;while(i+n<N&&parse(addDays(r0,i+n)).getMonth()===d.getMonth())n++;
       months+=`<div class="gm" style="left:${i*DW}px;width:${n*DW}px">${d.getFullYear()}年${d.getMonth()+1}月</div>`;
     }
-    const cls=(wd===6?' sat':wd===0?' sun':'')+(s===TODAY?' today':'');
-    if(S.gscale==='day')days+=`<div class="gd${cls}" style="left:${i*DW}px;width:${DW}px" title="${fmt(s)}（${WD[wd]}）">${d.getDate()}</div>`;
+    const inf=dayInfo(s,co);
+    const cls=(inf.kind?' '+inf.kind:'')+(s===TODAY?' today':'');
+    if(S.gscale==='day')days+=`<div class="gd${cls}" style="left:${i*DW}px;width:${DW}px" title="${fmt(s)}（${WD[wd]}）${inf.name?' '+esc(inf.name):''}">${d.getDate()}</div>`;
     else if(wd===1)days+=`<div class="gd" style="left:${i*DW}px;width:${DW*7}px">${d.getMonth()+1}/${d.getDate()}〜</div>`;
-    if(wd===0||wd===6){if(S.gscale==='day'||wd===6)layer+=`<div class="we" style="left:${i*DW}px;width:${DW*(S.gscale==='day'?1:2)}px"></div>`}
+    if(inf.kind)layer+=`<div class="we ${inf.kind}" style="left:${i*DW}px;width:${DW}px"${inf.name?` title="${esc(inf.name)}"`:''}></div>`;
     if(S.gscale==='week'&&wd===1)layer+=`<div class="wk" style="left:${i*DW}px"></div>`;
   }
   layer+=`<div class="now" style="left:${x(TODAY)+DW/2}px" title="今日"></div>`;
@@ -721,7 +800,7 @@ function renderGantt(list,gl){
     if(!ts.length){rows+=`<div class="grow"><div class="glabel"><span class="sub">${all.length?'この条件に合うタスクはありません':'タスクはまだありません'}</span></div><div class="gtrack" style="width:${W}px"></div></div>`;continue}
     for(const t of ts){
       const subs=subsOf(t),sd=subs.filter(s=>s.done).length;
-      const m=meta(t);const tip=`${t.title}｜${SL[t.status]}${t.start?'｜'+fmt(t.start):''}${t.end?' → '+fmt(t.end):''}${subs.length?`｜サブタスク ${sd}/${subs.length}`:''}`;
+      const m=meta(t);const tip=`${t.title}｜${SL[t.status]}${t.start?'｜'+fmt(t.start):''}${t.end?' → '+fmt(t.end):''}${t.start&&t.end?`（稼働 ${workdays(t.start,t.end)}日）`:''}${subs.length?`｜サブタスク ${sd}/${subs.length}`:''}`;
       let bar;
       if(t.start&&t.end){
         const pct=t.status==='done'?100:subs.length?Math.round(sd/subs.length*100):0;
@@ -735,10 +814,10 @@ function renderGantt(list,gl){
         <div class="gtrack" style="width:${W}px">${bar}</div></div>`;
     }
   }
-  const legend=STATUSES.map(s=>`<span class="st-${s.k}"><i></i>${s.l}</span>`).join('')+'<span><i style="background:var(--accent);width:2px"></i>今日</span>';
+  const legend=STATUSES.map(s=>`<span class="st-${s.k}"><i></i>${s.l}</span>`).join('')+'<span><i style="background:var(--accent);width:2px"></i>今日</span>'+(jpOn()?'<span><i class="lg-jp"></i>祝日</span>':'')+'<span><i class="lg-co"></i>会社休日</span>';
   const old=list.querySelector('.gwrap');const keep=old?{l:old.scrollLeft,t:old.scrollTop,r0:old.dataset.r0,dw:old.dataset.dw}:null;
   list.innerHTML=`<div class="gtools"><div class="glegend">${legend}</div>
-    <div class="tb-r"><button type="button" class="btn" data-gtoday>今日へ移動</button>
+    <div class="tb-r"><button type="button" class="btn" data-hopen>休日設定</button><button type="button" class="btn" data-gtoday>今日へ移動</button>
     <div class="seg" role="group" aria-label="表示の単位"><button type="button" data-gscale="day" aria-pressed="${S.gscale==='day'}">日</button><button type="button" data-gscale="week" aria-pressed="${S.gscale==='week'}">週</button></div></div></div>
     <div class="gwrap" data-r0="${r0}" data-dw="${DW}"><div class="gin" style="width:calc(var(--LW) + ${W}px)">
       <div class="ghead"><div class="gcorner">タスク</div><div class="gscale" style="width:${W}px">${months}${days}</div></div>
@@ -751,8 +830,49 @@ function renderGantt(list,gl){
 $('v-list').onclick=$('v-gantt').onclick=e=>{S.view=e.currentTarget.dataset.view;LS.set('tl-view',S.view);gScrollToday=true;render()};
 $('list').addEventListener('click',e=>{
   const ge=e.target.closest('[data-gedit]');if(ge){openTask(ge.closest('.grow').dataset.id);return}
+  if(e.target.closest('[data-hopen]')){openHolidays();return}
   const gs=e.target.closest('[data-gscale]');if(gs){S.gscale=gs.dataset.gscale;LS.set('tl-gscale',S.gscale);render();return}
   if(e.target.closest('[data-gtoday]')){gScrollToday=true;render()}
+});
+
+/* ---------- holiday settings ---------- */
+function renderHolidayDlg(){
+  $('hd-jp').checked=jpOn();$('hd-jp').disabled=S.readOnly;
+  const y=new Date().getFullYear();const rows=[];
+  for(const yy of [y,y+1])for(const [d,n] of [...jpHolidays(yy)].sort((a,b)=>a[0].localeCompare(b[0])))rows.push(`<li><span class="d">${yy}/${fmt(d).replace(/^\d+\//,'')}（${WD[parse(d).getDay()]}）</span><span class="n">${n}</span></li>`);
+  $('hd-jpsum').textContent=`祝日の一覧を見る（${y}年・${y+1}年）`;
+  $('hd-jplist').innerHTML=rows.join('');
+  const hs=[...S.holidays].sort((a,b)=>(a.start||'').localeCompare(b.start||''));
+  const fd=s=>{const d=parse(s);return `${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()}（${WD[d.getDay()]}）`};
+  $('hd-list').innerHTML=hs.length?hs.map(h=>`<li data-hid="${esc(h.id)}"><span class="d">${fd(h.start)}${h.end&&h.end>h.start?`<br>〜 ${fd(h.end)}`:''}</span><span class="n">${esc(h.name)}</span>${S.readOnly?'':'<button type="button" class="icon-btn" data-hdel>削除</button>'}</li>`).join('')
+    :'<li class="none">まだ登録されていません。下の欄から追加できます。</li>';
+  $('hd-form').querySelectorAll('input,button').forEach(x=>x.disabled=S.readOnly);
+}
+function openHolidays(){lastFocus=document.activeElement;$('hd-err').textContent='';renderHolidayDlg();$('hd').hidden=false;$('hd-close').focus()}
+function closeHolidays(){$('hd').hidden=true;lastFocus&&lastFocus.focus&&lastFocus.focus()}
+$('hd-close').onclick=closeHolidays;
+$('hd').addEventListener('click',e=>{if(e.target===$('hd'))closeHolidays()});
+$('hd-jp').addEventListener('change',async e=>{
+  const v=e.target.checked;
+  try{await put('settings','calendar',{jpHolidays:v});if(S.mode==='db'){const c=S.settings.find(x=>x.id==='calendar');if(c)c.jpHolidays=v;else S.settings.push({id:'calendar',jpHolidays:v})}
+    render();toast(v?'日本の祝日を表示します':'日本の祝日を非表示にしました')}catch(_){e.target.checked=!v}
+});
+$('hd-form').addEventListener('submit',async e=>{
+  e.preventDefault();if(S.readOnly)return;
+  const name=$('hd-name').value.trim(),start=$('hd-start').value,end=$('hd-end').value;
+  if(!name||!start){$('hd-err').textContent='名前と開始日を入力してください。';return}
+  if(end&&end<start){$('hd-err').textContent='終了日は開始日以降の日付にしてください。';return}
+  if(end&&diff(start,end)>366){$('hd-err').textContent='1回で登録できるのは1年以内の期間です。';return}
+  $('hd-err').textContent='';
+  const id='h'+uid(),data={name,start,end:end&&end>start?end:''};
+  try{await put('holidays',id,data);if(!S.holidays.some(x=>x.id===id))S.holidays.push({id,...data});
+    $('hd-name').value='';$('hd-start').value='';$('hd-end').value='';renderHolidayDlg();render();toast(`会社休日「${name}」を追加しました`)}catch(_){}
+});
+$('hd-list').addEventListener('click',async e=>{
+  const b=e.target.closest('[data-hdel]');if(!b)return;
+  if(!b.classList.contains('armed')){b.classList.add('armed');b.textContent='もう一度押すと削除';b.style.color='var(--danger)';return}
+  const id=b.closest('li').dataset.hid;
+  try{await remove('holidays',id);S.holidays=S.holidays.filter(x=>x.id!==id);renderHolidayDlg();render();toast('会社休日を削除しました')}catch(_){}
 });
 
 /* copy */
@@ -786,7 +906,7 @@ $('gd-copy').onclick=async e=>{
     closeGroup();S.fg=gid;render();toast(`グループ「${name}」を作成し、タスク${src.length}件を複製しました`);
   }catch(_){b.textContent='グループを複製';b.disabled=false}
 };
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(!$('ed').hidden)closeTask();if(!$('gd').hidden)closeGroup()}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(!$('hd').hidden)closeHolidays();if(!$('ed').hidden)closeTask();if(!$('gd').hidden)closeGroup()}});
 
 init();
 })();
