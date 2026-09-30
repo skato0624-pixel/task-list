@@ -345,7 +345,7 @@ details.jpl summary{cursor:pointer;font-size:.85rem;color:var(--muted)}
     <h2 id="hd-h">休日設定</h2>
     <div class="hsec">
       <label class="chk" style="color:var(--fg);font-size:.9rem"><input type="checkbox" id="hd-jp">日本の祝日をカレンダーに表示する</label>
-      <p class="hint">振替休日と国民の休日も含みます。春分の日・秋分の日は計算で求めた日付です（正式な日付は毎年2月に官報で発表されます）。</p>
+      <p class="hint" id="hd-src"></p>
       <details class="jpl"><summary id="hd-jpsum">祝日の一覧を見る</summary><ul class="hlist" id="hd-jplist" style="margin-top:8px"></ul></details>
     </div>
     <div class="hsec">
@@ -471,7 +471,22 @@ function meta(t){
    春分・秋分 use the standard approximation formula; the official dates are announced each February. */
 const jpCache={};
 function nthMon(y,m,n){const d=new Date(y,m-1,1);const off=(8-d.getDay())%7;return ymd(new Date(y,m-1,1+off+(n-1)*7))}
+// Public holiday data (holiday_jp project, based on the Cabinet Office list; 1970–2050) loaded from jsDelivr.
+const JP_SRC='https://cdn.jsdelivr.net/npm/@holiday-jp/holiday_jp@2.5.2/lib/holidays.js/+esm';
+let JP_ONLINE=null,JP_STATUS='loading',JP_RANGE='';
+async function loadJpOnline(){
+  try{
+    const m=await Promise.race([import(JP_SRC),new Promise((_,r)=>setTimeout(()=>r(new Error('timeout')),12000))]);
+    const data=(m&&m.default)||m;const by={};
+    for(const k of Object.keys(data||{})){if(!/^\d{4}-\d\d-\d\d$/.test(k))continue;const y=+k.slice(0,4);(by[y]=by[y]||new Map()).set(k,(data[k]&&data[k].name)||'祝日')}
+    const ys=Object.keys(by).map(Number).sort((a,b)=>a-b);if(!ys.length)throw new Error('empty');
+    JP_ONLINE=by;JP_STATUS='ok';JP_RANGE=`${ys[0]}〜${ys[ys.length-1]}年`;
+  }catch(e){JP_STATUS='fail'}
+  for(const k of Object.keys(jpCache))delete jpCache[k];
+  render();if(!$('hd').hidden)renderHolidayDlg();
+}
 function jpHolidays(y){
+  if(JP_ONLINE&&JP_ONLINE[y])return JP_ONLINE[y];
   if(jpCache[y])return jpCache[y];
   const h=new Map();const add=(m,d,n)=>h.set(`${y}-${pad(m)}-${pad(d)}`,n);
   const e=y-1980,shun=Math.floor(20.8431+0.242194*e-Math.floor(e/4)),shu=Math.floor(23.2488+0.242194*e-Math.floor(e/4));
@@ -838,6 +853,9 @@ $('list').addEventListener('click',e=>{
 /* ---------- holiday settings ---------- */
 function renderHolidayDlg(){
   $('hd-jp').checked=jpOn();$('hd-jp').disabled=S.readOnly;
+  $('hd-src').textContent=JP_STATUS==='ok'?`祝日データはインターネット上の公開データ（holiday_jp／内閣府の発表に基づく）から取得しています（${JP_RANGE}）。振替休日と国民の休日も含みます。範囲外の年は祝日法の規則から計算して表示します。`
+    :JP_STATUS==='loading'?'祝日データをインターネットから取得しています…'
+    :'祝日データをインターネットから取得できなかったため、祝日法の規則から計算して表示しています（振替休日・国民の休日を含む。春分の日・秋分の日は計算上の日付）。';
   const y=new Date().getFullYear();const rows=[];
   for(const yy of [y,y+1])for(const [d,n] of [...jpHolidays(yy)].sort((a,b)=>a[0].localeCompare(b[0])))rows.push(`<li><span class="d">${yy}/${fmt(d).replace(/^\d+\//,'')}（${WD[parse(d).getDay()]}）</span><span class="n">${n}</span></li>`);
   $('hd-jpsum').textContent=`祝日の一覧を見る（${y}年・${y+1}年）`;
@@ -909,5 +927,6 @@ $('gd-copy').onclick=async e=>{
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(!$('hd').hidden)closeHolidays();if(!$('ed').hidden)closeTask();if(!$('gd').hidden)closeGroup()}});
 
 init();
+loadJpOnline();
 })();
 </script>
