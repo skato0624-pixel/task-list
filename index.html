@@ -502,6 +502,8 @@ function writeSubs(id,fn){
     const data={subtasks:next};let msg='';
     if(allDone&&t.status!=='done'){data.status='done';msg=`サブタスクがすべて完了したため「${t.title}」を完了にしました`}
     else if(!allDone&&next.length&&t.status==='done'){data.status='doing';msg=`未完了のサブタスクがあるため「${t.title}」を遂行中に戻しました`}
+    else if(!allDone&&(t.status==='todo'||t.status==='hold')&&next.filter(s=>s.done).length>subsOf(t).filter(s=>s.done).length){
+      data.status='doing';msg=`サブタスクに着手したため「${t.title}」を遂行中にしました`}
     if(S.mode==='db')Object.assign(t,data); // show immediately; snapshot confirms
     render();await patch('tasks',id,data);if(msg)toast(msg);};
   queues[id]=(queues[id]||Promise.resolve()).then(run).catch(()=>{render()});
