@@ -163,6 +163,17 @@ label.f{display:grid;gap:4px;font-size:.78rem;color:var(--muted)}
 
 .toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 20px);transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:8px 16px;border-radius:8px;font-size:.88rem;z-index:30;max-width:calc(100% - 32px)}
 
+.kebab{border:0;background:none;color:var(--muted);width:32px;height:32px;border-radius:6px;display:grid;place-items:center;flex:none;padding:0}
+.kebab:hover,.kebab[aria-expanded="true"]{background:var(--surface-2);color:var(--fg)}
+.menu{position:fixed;z-index:25;min-width:220px;max-width:calc(100vw - 16px);background:var(--surface);border:1px solid var(--line);border-radius:9px;box-shadow:var(--shadow);padding:4px;display:grid;gap:1px}
+.menu button{border:0;background:none;text-align:left;padding:8px 12px;border-radius:6px;font-size:.9rem;display:grid;gap:1px;width:100%}
+.menu button small{font-size:.72rem;color:var(--muted)}
+.menu button:hover,.menu button:focus-visible{background:var(--surface-2);outline:none}
+.menu .danger{color:var(--danger)}
+.menu .danger.armed,.menu .danger.armed:hover,.menu .danger.armed:focus-visible{background:var(--danger);color:var(--surface)}
+.menu .danger.armed small{color:inherit}
+.menu hr{border:0;border-top:1px solid var(--line);margin:3px 4px}
+
 /* view switch */
 .tb-r{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
 .seg{display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden;background:var(--surface)}
@@ -365,6 +376,8 @@ details.jpl summary{cursor:pointer;font-size:.85rem;color:var(--muted)}
     <div class="dlg-f"><div class="r"><button type="button" class="btn" id="hd-close">閉じる</button></div></div>
   </div>
 </div>
+
+<div class="menu" id="menu" role="menu" hidden></div>
 
 <div class="toast" id="toast" hidden></div>
 
@@ -577,7 +590,7 @@ function render(){
           <span class="swatch"></span><h3>${g?esc(g.name):'未分類'}</h3>
           <span class="cnt mono">${all.length}件 ・ 完了 ${done}</span>
         </button>
-        ${g&&!S.readOnly?`<button type="button" class="icon-btn" data-editg="${esc(g.id)}">編集</button>`:''}
+        ${g?`<button type="button" class="kebab" data-menu="group" data-mid="${esc(g.id)}" aria-haspopup="menu" aria-expanded="false" aria-label="グループ「${esc(g.name)}」のメニュー"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="3" cy="8" r="1.5" fill="currentColor"/><circle cx="8" cy="8" r="1.5" fill="currentColor"/><circle cx="13" cy="8" r="1.5" fill="currentColor"/></svg></button>`:''}
       </div>
       <ul class="rows">${rows.length?rows.map(rowHTML).join(''):`<li class="empty-row">${all.length?'この条件に合うタスクはありません。':'このグループにはまだタスクがありません。'}</li>`}</ul>
     </section>`;
@@ -619,7 +632,7 @@ function rowHTML(t){
       ${t.note?`<div class="t-note">${esc(t.note)}</div>`:''}
     </div>
     ${span(t,m.over)}
-    <button type="button" class="icon-btn" data-edit aria-label="「${esc(t.title)}」を編集">編集</button>
+    <button type="button" class="kebab" data-menu="task" data-mid="${esc(t.id)}" aria-haspopup="menu" aria-expanded="false" aria-label="「${esc(t.title)}」のメニュー"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="3" cy="8" r="1.5" fill="currentColor"/><circle cx="8" cy="8" r="1.5" fill="currentColor"/><circle cx="13" cy="8" r="1.5" fill="currentColor"/></svg></button>
     ${subsHTML(t)}
   </li>`;
 }
@@ -701,7 +714,7 @@ $('list').addEventListener('click',e=>{
     if(opening){const a=$('sa-'+id);if(a&&!subsOf(S.tasks.find(x=>x.id===id)||{}).length)a.focus()}return}
   const sd=e.target.closest('[data-subdel]');
   if(sd){const id=sd.closest('.task').dataset.id,sid=sd.closest('.sub').dataset.sid;writeSubs(id,arr=>arr.filter(x=>x.id!==sid));toast('サブタスクを削除しました');return}
-  const eg=e.target.closest('[data-editg]');if(eg){openGroup(eg.dataset.editg);return}
+  const mb=e.target.closest('[data-menu]');if(mb){openMenu(mb);return}
   const ed=e.target.closest('[data-edit]');if(ed){openTask(ed.closest('.task').dataset.id)}
 });
 
@@ -728,10 +741,15 @@ $('ed-form').addEventListener('submit',async e=>{
   try{await patch('tasks',edId,{title,groupId:$('ed-group').value||null,status:$('ed-status').value,start,end,note:$('ed-note').value.trim()});closeTask();toast('保存しました')}catch(_){}
 });
 function disarm(b){b.classList.remove('armed');b.textContent='削除'}
+async function doDeleteTask(id){try{await remove('tasks',id);toast('タスクを削除しました')}catch(_){}}
+async function doDeleteGroup(id){
+  try{for(const t of S.tasks.filter(t=>t.groupId===id))await patch('tasks',t.id,{groupId:null});
+    await remove('groups',id);if(S.fg===id)S.fg='all';render();toast('グループを削除しました')}catch(_){}
+}
 $('ed-del').onclick=async e=>{
   const b=e.currentTarget;
   if(!b.classList.contains('armed')){b.classList.add('armed');b.textContent='もう一度押すと削除';return}
-  const id=edId;closeTask();try{await remove('tasks',id);toast('タスクを削除しました')}catch(_){}
+  const id=edId;closeTask();doDeleteTask(id);
 };
 
 /* group editor */
@@ -758,9 +776,7 @@ $('gd-form').addEventListener('submit',async e=>{
 $('gd-del').onclick=async e=>{
   const b=e.currentTarget;
   if(!b.classList.contains('armed')){b.classList.add('armed');b.textContent=+b.dataset.n?`${b.dataset.n}件を未分類に移して削除`:'もう一度押すと削除';return}
-  const id=gdId;closeGroup();
-  try{for(const t of S.tasks.filter(t=>t.groupId===id))await patch('tasks',t.id,{groupId:null});
-    await remove('groups',id);if(S.fg===id)S.fg='all';render();toast('グループを削除しました')}catch(_){}
+  const id=gdId;closeGroup();doDeleteGroup(id);
 };
 /* ---------- gantt ---------- */
 const addDays=(s,n)=>{const d=parse(s);d.setDate(d.getDate()+n);return ymd(d)};
@@ -902,26 +918,89 @@ async function addTask(data){
   if(!S.tasks.some(x=>x.id===id)){S.tasks.push({id,...data});render()} // show before the snapshot arrives
   return id;
 }
-$('ed-copy').onclick=async e=>{
-  const t=S.tasks.find(x=>x.id===edId);if(!t||S.readOnly)return;
-  const b=e.currentTarget;b.disabled=true;
-  try{const id=await addTask(cloneTask(t,$('ed-reset').checked,{title:t.title+'（コピー）'}));
-    closeTask();openTask(id);$('ed-title').select();toast('タスクを複製しました。必要なら名前や日付を変えて保存してください')}
-  catch(_){}finally{b.disabled=S.readOnly}
-};
-$('gd-copy').onclick=async e=>{
-  const g=gById(gdId);if(!g||S.readOnly)return;
-  const b=e.currentTarget;b.disabled=true;const reset=$('gd-reset').checked;
+async function doCopyTask(id,reset){
+  const t=S.tasks.find(x=>x.id===id);if(!t||S.readOnly)return;
+  const nid=await addTask(cloneTask(t,reset,{title:t.title+'（コピー）'}));
+  if(!$('ed').hidden)closeTask();
+  openTask(nid);$('ed-title').select();toast('タスクを複製しました。必要なら名前や日付を変えて保存してください');
+}
+async function doCopyGroup(id,reset,progress){
+  const g=gById(id);if(!g||S.readOnly)return;
   const src=S.tasks.filter(t=>t.groupId===g.id).sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
   const gid='g'+uid();const name=(g.name+'（コピー）').slice(0,40);
-  try{
-    const gdata={name,color:((g.color|0)+1)%6,order:Date.now()};await put('groups',gid,gdata);
-    if(!gById(gid))S.groups.push({id:gid,...gdata});
-    b.textContent=`複製中… 0/${src.length}`;
-    let i=0;for(const t of src){await addTask(cloneTask(t,reset,{groupId:gid,createdAt:Date.now()+i}));i++;b.textContent=`複製中… ${i}/${src.length}`}
-    closeGroup();S.fg=gid;render();toast(`グループ「${name}」を作成し、タスク${src.length}件を複製しました`);
-  }catch(_){b.textContent='グループを複製';b.disabled=false}
+  const gdata={name,color:((g.color|0)+1)%6,order:Date.now()};await put('groups',gid,gdata);
+  if(!gById(gid))S.groups.push({id:gid,...gdata});
+  let i=0;progress&&progress(0,src.length);
+  for(const t of src){await addTask(cloneTask(t,reset,{groupId:gid,createdAt:Date.now()+i}));i++;progress&&progress(i,src.length)}
+  S.fg=gid;render();toast(`グループ「${name}」を作成し、タスク${src.length}件を複製しました`);
+}
+$('ed-copy').onclick=async e=>{
+  const b=e.currentTarget;b.disabled=true;
+  try{await doCopyTask(edId,$('ed-reset').checked)}catch(_){}finally{b.disabled=S.readOnly}
 };
+$('gd-copy').onclick=async e=>{
+  const b=e.currentTarget;b.disabled=true;
+  try{await doCopyGroup(gdId,$('gd-reset').checked,(i,n)=>{b.textContent=`複製中… ${i}/${n}`});closeGroup()}
+  catch(_){b.textContent='グループを複製';b.disabled=false}
+};
+
+/* ---------- ⋯ menu ---------- */
+let menuCtx=null;
+const menuBtn=()=>menuCtx&&document.querySelector(`[data-menu="${menuCtx.kind}"][data-mid="${CSS.escape(menuCtx.id)}"]`);
+function openMenu(btn){
+  const kind=btn.dataset.menu,id=btn.dataset.mid;
+  if(menuCtx&&menuCtx.kind===kind&&menuCtx.id===id){closeMenu(true);return}
+  closeMenu(false);menuCtx={kind,id};
+  const m=$('menu');let h='';
+  if(kind==='task'){
+    const t=S.tasks.find(x=>x.id===id);if(!t){menuCtx=null;return}
+    m.setAttribute('aria-label',`「${t.title}」のメニュー`);
+    h=`<button type="button" role="menuitem" data-act="edit">編集</button>`;
+    if(!S.readOnly)h+=`<button type="button" role="menuitem" data-act="copy">複製<small>ステータスとサブタスクのチェックは未着手に戻ります</small></button><hr><button type="button" role="menuitem" class="danger" data-act="del">削除</button>`;
+  }else{
+    const g=gById(id);if(!g){menuCtx=null;return}
+    const n=S.tasks.filter(t=>t.groupId===id).length;menuCtx.n=n;
+    m.setAttribute('aria-label',`グループ「${g.name}」のメニュー`);
+    h=`<button type="button" role="menuitem" data-act="edit">編集</button>`;
+    if(!S.readOnly)h+=`<button type="button" role="menuitem" data-act="copy">複製${n?`（タスク${n}件も一緒に）`:''}<small>ステータスとサブタスクのチェックは未着手に戻ります</small></button><hr><button type="button" role="menuitem" class="danger" data-act="del">削除${n?`<small>タスク${n}件は未分類に移ります</small>`:''}</button>`;
+  }
+  m.innerHTML=h;m.hidden=false;btn.setAttribute('aria-expanded','true');
+  const r=btn.getBoundingClientRect(),mw=m.offsetWidth,mh=m.offsetHeight;
+  let left=Math.min(r.right-mw,innerWidth-mw-8);left=Math.max(8,left);
+  let top=r.bottom+4;if(top+mh>innerHeight-8&&r.top-mh-4>8)top=r.top-mh-4;
+  m.style.left=left+'px';m.style.top=top+'px';
+  m.querySelector('button').focus();
+}
+function closeMenu(refocus){
+  if(!menuCtx)return;const b=menuBtn();
+  $('menu').hidden=true;$('menu').innerHTML='';
+  if(b){b.setAttribute('aria-expanded','false');if(refocus)b.focus()}
+  menuCtx=null;
+}
+$('menu').addEventListener('click',async e=>{
+  const it=e.target.closest('[data-act]');if(!it||!menuCtx)return;
+  const {kind,id,n}=menuCtx,act=it.dataset.act;
+  if(act==='del'&&!it.classList.contains('armed')){it.classList.add('armed');it.innerHTML=kind==='group'&&n?`もう一度押すと削除<small>タスク${n}件は未分類に移ります</small>`:'もう一度押すと削除';return}
+  closeMenu(true);
+  if(act==='edit'){kind==='task'?openTask(id):openGroup(id);return}
+  if(act==='del'){kind==='task'?doDeleteTask(id):doDeleteGroup(id);return}
+  if(act==='copy'){
+    try{if(kind==='task')await doCopyTask(id,true);
+      else await doCopyGroup(id,true,(i,t)=>{if(t)toast(`グループを複製中… ${i}/${t}`)})}catch(_){}
+  }
+});
+$('menu').addEventListener('keydown',e=>{
+  const items=[...$('menu').querySelectorAll('[data-act]')];const i=items.indexOf(document.activeElement);
+  if(e.key==='ArrowDown'){e.preventDefault();items[(i+1)%items.length].focus()}
+  else if(e.key==='ArrowUp'){e.preventDefault();items[(i-1+items.length)%items.length].focus()}
+  else if(e.key==='Home'){e.preventDefault();items[0].focus()}
+  else if(e.key==='End'){e.preventDefault();items[items.length-1].focus()}
+  else if(e.key==='Escape'){e.preventDefault();e.stopPropagation();closeMenu(true)}
+  else if(e.key==='Tab'){closeMenu(false)}
+});
+document.addEventListener('click',e=>{if(menuCtx&&!e.target.closest('#menu')&&!e.target.closest('[data-menu]'))closeMenu(false)});
+window.addEventListener('resize',()=>closeMenu(false));
+document.addEventListener('scroll',e=>{if(menuCtx&&!(e.target&&e.target.closest&&e.target.closest('#menu')))closeMenu(false)},true);
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(!$('hd').hidden)closeHolidays();if(!$('ed').hidden)closeTask();if(!$('gd').hidden)closeGroup()}});
 
 init();
