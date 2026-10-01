@@ -150,7 +150,6 @@ label.f{display:grid;gap:4px;font-size:.78rem;color:var(--muted)}
 .g2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .dlg-f{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;align-items:center}
 .dlg-f .r{display:flex;gap:8px;margin-left:auto}
-.copybox{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;justify-content:space-between;border-block:1px solid var(--line);padding-block:12px}
 .chk{display:flex;gap:6px;align-items:center;font-size:.82rem;color:var(--muted);cursor:pointer}
 .chk input{width:16px;height:16px;margin:0;accent-color:var(--accent)}
 .err{color:var(--danger);font-size:.82rem;min-height:1.2em;margin:0}
@@ -327,10 +326,6 @@ details.jpl summary{cursor:pointer;font-size:.85rem;color:var(--muted)}
       <label class="f">終了日<input class="in mono" type="date" id="ed-end"></label>
     </div>
     <label class="f">メモ<textarea class="in" id="ed-note" maxlength="2000"></textarea></label>
-    <div class="copybox">
-      <label class="chk"><input type="checkbox" id="ed-reset" checked>複製するときステータスとサブタスクのチェックを未着手に戻す</label>
-      <button type="button" class="btn" id="ed-copy">このタスクを複製</button>
-    </div>
     <p class="err" id="ed-err"></p>
     <div class="dlg-f">
       <button type="button" class="btn warn" id="ed-del">削除</button>
@@ -347,10 +342,6 @@ details.jpl summary{cursor:pointer;font-size:.85rem;color:var(--muted)}
     <h2 id="gd-h">グループを編集</h2>
     <label class="f">グループ名<input class="in" id="gd-name" maxlength="40" required></label>
     <div class="f">色<div class="swatches" id="gd-colors"></div></div>
-    <div class="copybox">
-      <label class="chk"><input type="checkbox" id="gd-reset" checked>複製するときステータスとサブタスクのチェックを未着手に戻す</label>
-      <button type="button" class="btn" id="gd-copy">グループを複製</button>
-    </div>
     <p class="err" id="gd-err"></p>
     <div class="dlg-f">
       <button type="button" class="btn warn" id="gd-del">削除</button>
@@ -743,7 +734,7 @@ function openTask(id){
   $('ed-title').value=t.title||'';$('ed-group').innerHTML=groupOpts(t.groupId);
   $('ed-status').value=t.status;$('ed-start').value=t.start||'';$('ed-end').value=t.end||'';$('ed-note').value=t.note||'';
   $('ed-err').textContent='';disarm($('ed-del'));
-  $('ed-form').querySelectorAll('input,select,textarea,button[type=submit],#ed-del,#ed-copy').forEach(x=>x.disabled=S.readOnly);
+  $('ed-form').querySelectorAll('input,select,textarea,button[type=submit],#ed-del').forEach(x=>x.disabled=S.readOnly);
   $('ed').hidden=false;$('ed-title').focus();
 }
 function closeTask(){$('ed').hidden=true;edId=null;lastFocus&&lastFocus.focus&&lastFocus.focus()}
@@ -776,8 +767,7 @@ function openGroup(id){
   $('gd-name').value=g.name;$('gd-c'+((g.color|0)%6)).checked=true;$('gd-err').textContent='';
   const n=S.tasks.filter(t=>t.groupId===id).length;
   const b=$('gd-del');disarm(b);b.dataset.n=n;
-  $('gd-copy').textContent=n?`グループを複製（タスク${n}件も一緒に）`:'グループを複製';
-  $('gd-form').querySelectorAll('input,button[type=submit],#gd-del,#gd-copy').forEach(x=>x.disabled=S.readOnly);
+  $('gd-form').querySelectorAll('input,button[type=submit],#gd-del').forEach(x=>x.disabled=S.readOnly);
   $('gd').hidden=false;$('gd-name').focus();
 }
 function closeGroup(){$('gd').hidden=true;gdId=null;lastFocus&&lastFocus.focus&&lastFocus.focus()}
@@ -950,15 +940,6 @@ async function doCopyGroup(id,reset,progress){
   for(const t of src){await addTask(cloneTask(t,reset,{groupId:gid,createdAt:Date.now()+i}));i++;progress&&progress(i,src.length)}
   S.fg=gid;render();toast(`グループ「${name}」を作成し、タスク${src.length}件を複製しました`);
 }
-$('ed-copy').onclick=async e=>{
-  const b=e.currentTarget;b.disabled=true;
-  try{await doCopyTask(edId,$('ed-reset').checked)}catch(_){}finally{b.disabled=S.readOnly}
-};
-$('gd-copy').onclick=async e=>{
-  const b=e.currentTarget;b.disabled=true;
-  try{await doCopyGroup(gdId,$('gd-reset').checked,(i,n)=>{b.textContent=`複製中… ${i}/${n}`});closeGroup()}
-  catch(_){b.textContent='グループを複製';b.disabled=false}
-};
 
 async function setArchived(id,on){
   const g=gById(id);if(!g||S.readOnly)return;
