@@ -200,6 +200,22 @@ label.f{display:grid;gap:4px;font-size:.78rem;color:var(--muted)}
 @keyframes moved{from{background:color-mix(in srgb,var(--accent) 18%,transparent)}to{background:transparent}}
 @media (prefers-reduced-motion:reduce){.sec.moved,.task.moved{animation:none}}
 
+.cchip svg{flex:none}
+.cmts{grid-column:3/-1;display:grid;gap:8px;margin:-2px 0 4px;padding:4px 0 4px 12px;border-left:2px solid color-mix(in srgb,var(--accent) 45%,var(--line))}
+.cmts ul{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.cmt{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 10px;display:grid;gap:4px;min-width:0}
+.cmt-h{display:flex;align-items:center;gap:8px;font-size:.76rem;color:var(--muted)}
+.cmt-h .ed{font-size:.72rem}
+.cmt-a{margin-left:auto;display:flex;gap:2px}
+.cmt-a .icon-btn{padding:1px 8px;font-size:.76rem}
+.cmt-a .icon-btn.armed{background:var(--danger);color:var(--surface)}
+.cmt-b{white-space:pre-wrap;overflow-wrap:anywhere;font-size:.9rem;line-height:1.65}
+.cform{display:grid;gap:6px}
+.cform textarea.in{min-height:64px;font-size:.9rem}
+.cbtns{display:flex;justify-content:flex-end;gap:6px}
+.cbtns .btn{min-height:32px;padding:4px 14px;font-size:.85rem}
+.cnone{margin:0;color:var(--muted);font-size:.85rem}
+
 /* view switch */
 .tb-r{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
 .seg{display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden;background:var(--surface)}
@@ -281,6 +297,7 @@ details.jpl summary{cursor:pointer;font-size:.85rem;color:var(--muted)}
   .task{grid-template-columns:18px 96px minmax(0,1fr) auto}
   .task .span{grid-column:3/-1;grid-row:2}
   .subs{grid-column:2/-1;margin-left:8px}
+  .cmts{grid-column:2/-1;margin-left:8px}
 }
 @media (max-width:420px){ .g2{grid-template-columns:1fr} }
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
@@ -431,6 +448,7 @@ const LS={get(k,d){try{const v=localStorage.getItem(k);return v==null?d:JSON.par
 const closed=new Set(LS.get('tl-closed',[]));
 const openSubs=new Set(LS.get('tl-subs',[]));
 const drafts={};
+const openCmts=new Set(LS.get('tl-cmts',[]));const cdrafts={};let cEdit=null;
 S.sort=LS.get('tl-sort','end'); $('sort').value=S.sort;
 S.view=LS.get('tl-view','list'); S.archOpen=LS.get('tl-archopen',false); S.gscale=LS.get('tl-gscale','day'); let gScrollToday=true;
 
@@ -646,7 +664,7 @@ function render(){
   }
   // keep focus and in-progress typing across re-renders
   const ae=document.activeElement;
-  const keep=ae&&ae.id&&list.contains(ae)&&ae.matches('input')?{id:ae.id,v:ae.value,s:ae.selectionStart,e:ae.selectionEnd,text:ae.type==='text'}:null;
+  const keep=ae&&ae.id&&list.contains(ae)&&ae.matches('input,textarea')?{id:ae.id,v:ae.value,s:ae.selectionStart,e:ae.selectionEnd,text:ae.type==='text'||ae.tagName==='TEXTAREA'}:null;
   list.innerHTML=html;
   if(keep){const el=$(keep.id);if(el){if(keep.text){el.value=keep.v}el.focus();if(keep.text){try{el.setSelectionRange(keep.s,keep.e)}catch(_){}}}}
 }
@@ -671,6 +689,30 @@ function subsHTML(t){
     ${S.readOnly?'':`<form class="sadd" data-subadd><input class="in" id="sa-${tid}" placeholder="サブタスクを追加（Enterで登録）" maxlength="120" aria-label="新しいサブタスク" value="${esc(drafts[t.id]||'')}"><button class="btn" type="submit">追加</button></form>`}
   </div>`;
 }
+const cmtsOf=t=>Array.isArray(t.comments)?t.comments:[];
+const CICON='<svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>';
+function cmtChip(t){
+  const c=cmtsOf(t),open=openCmts.has(t.id);
+  if(!c.length&&S.readOnly)return '';
+  return `<button type="button" class="subchip cchip" data-cmttoggle aria-expanded="${open}" aria-label="${c.length?`コメント ${c.length}件`:'コメントを追加'}">${CICON}${c.length?`コメント <span class="mono">${c.length}</span>`:'＋ コメント'}</button>`;
+}
+function fmtAt(ms){const d=new Date(ms);const y=d.getFullYear()!==new Date().getFullYear()?d.getFullYear()+'/':'';return `${y}${d.getMonth()+1}/${d.getDate()}（${WD[d.getDay()]}） ${pad(d.getHours())}:${pad(d.getMinutes())}`}
+function cmtsHTML(t){
+  if(!openCmts.has(t.id))return '';
+  const tid=esc(t.id);
+  const items=[...cmtsOf(t)].sort((a,b)=>(b.at||0)-(a.at||0)).map(c=>{
+    const editing=cEdit&&cEdit.tid===t.id&&cEdit.cid===c.id;
+    return `<li class="cmt" data-cid="${esc(c.id)}">
+      <div class="cmt-h"><span class="mono">${fmtAt(c.at||0)}</span>${c.editedAt?'<span class="ed">（編集済み）</span>':''}
+        ${S.readOnly||editing?'':`<span class="cmt-a"><button type="button" class="icon-btn" data-cedit>編集</button><button type="button" class="icon-btn" data-cdel>削除</button></span>`}</div>
+      ${editing?`<form class="cform" data-cupd><textarea class="in" id="ce-${tid}-${esc(c.id)}" maxlength="4000" aria-label="コメントを編集">${esc(cEdit.v!=null?cEdit.v:c.text)}</textarea><div class="cbtns"><button type="button" class="btn" data-ccancel>キャンセル</button><button type="submit" class="btn pri">保存</button></div></form>`
+        :`<div class="cmt-b">${esc(c.text)}</div>`}
+    </li>`}).join('');
+  return `<div class="cmts">
+    ${S.readOnly?'':`<form class="cform" data-cadd><textarea class="in" id="ca-${tid}" maxlength="4000" placeholder="コメントやメモを書く（Ctrl+Enter で投稿）" aria-label="新しいコメント">${esc(cdrafts[t.id]||'')}</textarea><div class="cbtns"><button type="submit" class="btn pri">投稿</button></div></form>`}
+    ${items?`<ul>${items}</ul>`:(S.readOnly?'<p class="cnone">コメントはまだありません。</p>':'')}
+  </div>`;
+}
 function rowHTML(t){
   const m=meta(t);
   return `<li class="task st-${t.status}${t.status==='done'?' is-done':''}" data-id="${esc(t.id)}">
@@ -678,12 +720,13 @@ function rowHTML(t){
     <select class="stsel st-${t.status}" data-status aria-label="ステータス"${S.readOnly?' disabled':''}>${statusOpts(t.status)}</select>
     <div class="t-main">
       <button type="button" class="t-title" data-edit>${esc(t.title)}</button>
-      <div class="t-meta">${m.html}${subChip(t)}</div>
+      <div class="t-meta">${m.html}${subChip(t)}${cmtChip(t)}</div>
       ${t.note?`<div class="t-note">${esc(t.note)}</div>`:''}
     </div>
     ${span(t,m.over)}
     <button type="button" class="kebab" data-menu="task" data-mid="${esc(t.id)}" aria-haspopup="menu" aria-expanded="false" aria-label="「${esc(t.title)}」のメニュー"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="3" cy="8" r="1.5" fill="currentColor"/><circle cx="8" cy="8" r="1.5" fill="currentColor"/><circle cx="13" cy="8" r="1.5" fill="currentColor"/></svg></button>
     ${subsHTML(t)}
+    ${cmtsHTML(t)}
   </li>`;
 }
 
@@ -727,6 +770,41 @@ function writeSubs(id,fn){
   queues[id]=(queues[id]||Promise.resolve()).then(run).catch(()=>{render()});
   return queues[id];
 }
+function writeCmts(id,fn){
+  const run=async()=>{const t=S.tasks.find(x=>x.id===id);if(!t)return;const next=fn(cmtsOf(t).map(c=>({...c})));if(!next)return;
+    if(S.mode==='db')t.comments=next;render();await patch('tasks',id,{comments:next});};
+  queues[id]=(queues[id]||Promise.resolve()).then(run).catch(()=>{render()});
+  return queues[id];
+}
+$('list').addEventListener('submit',e=>{
+  const fa=e.target.closest('[data-cadd]'),fu=e.target.closest('[data-cupd]');if(!fa&&!fu)return;
+  e.preventDefault();e.stopImmediatePropagation();if(S.readOnly)return;
+  const id=e.target.closest('.task').dataset.id,ta=e.target.querySelector('textarea'),text=ta.value.trim();
+  if(fa){if(!text)return;ta.value='';delete cdrafts[id];ta.focus();
+    writeCmts(id,arr=>[...arr,{id:'c'+uid(),text,at:Date.now()}]);toast('コメントを投稿しました');return}
+  const cid=e.target.closest('.cmt').dataset.cid;
+  if(!text){toast('コメントが空です。消す場合は「削除」を使ってください');return}
+  cEdit=null;writeCmts(id,arr=>arr.map(c=>c.id===cid?{...c,text,editedAt:Date.now()}:c));
+},true);
+$('list').addEventListener('keydown',e=>{
+  if(e.target.tagName==='TEXTAREA'&&e.target.closest('.cform')&&e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();e.target.closest('form').requestSubmit()}
+  if(e.target.tagName==='TEXTAREA'&&e.target.closest('[data-cupd]')&&e.key==='Escape'){e.stopPropagation();cEdit=null;render()}
+});
+$('list').addEventListener('input',e=>{
+  const fa=e.target.closest('[data-cadd]');if(fa)cdrafts[e.target.closest('.task').dataset.id]=e.target.value;
+  const fu=e.target.closest('[data-cupd]');if(fu&&cEdit)cEdit.v=e.target.value;
+});
+$('list').addEventListener('click',e=>{
+  const tg=e.target.closest('[data-cmttoggle]');
+  if(tg){const id=tg.closest('.task').dataset.id;const opening=!openCmts.has(id);opening?openCmts.add(id):openCmts.delete(id);LS.set('tl-cmts',[...openCmts]);render();
+    if(opening){const a=$('ca-'+id);a&&a.focus()}return}
+  const ed=e.target.closest('[data-cedit]');
+  if(ed){const tid=ed.closest('.task').dataset.id,cid=ed.closest('.cmt').dataset.cid;cEdit={tid,cid,v:null};render();const ta=$(`ce-${tid}-${cid}`);if(ta){ta.focus();ta.setSelectionRange(ta.value.length,ta.value.length)}return}
+  if(e.target.closest('[data-ccancel]')){cEdit=null;render();return}
+  const del=e.target.closest('[data-cdel]');
+  if(del){if(!del.classList.contains('armed')){del.classList.add('armed');del.textContent='もう一度押すと削除';return}
+    const tid=del.closest('.task').dataset.id,cid=del.closest('.cmt').dataset.cid;writeCmts(tid,arr=>arr.filter(c=>c.id!==cid));toast('コメントを削除しました')}
+});
 $('list').addEventListener('submit',e=>{
   const f=e.target.closest('[data-subadd]');if(!f)return;e.preventDefault();if(S.readOnly)return;
   const id=f.closest('.task').dataset.id;const inp=f.querySelector('input');const title=inp.value.trim();if(!title)return;
