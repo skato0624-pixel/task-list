@@ -223,6 +223,7 @@ label.f{display:grid;gap:4px;font-size:.78rem;color:var(--muted)}
 .lf .hlist{color:var(--fg)}
 .slist{max-height:180px}
 .slist .n{display:flex;flex-wrap:wrap;align-items:center;gap:2px 0}
+.sdone{font-size:.72rem;color:var(--done);white-space:nowrap;flex:none}
 .slog{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;padding:2px 10px;font-size:.78rem;color:var(--muted)}
 .slog .sl{display:inline-flex;flex-wrap:wrap;align-items:center}
 
@@ -693,6 +694,7 @@ function subsHTML(t){
   const items=subsOf(t).map(s=>`<li class="sub${s.done?' done':''}" data-sid="${esc(s.id)}">
       <input type="checkbox" id="sc-${tid}-${esc(s.id)}" data-subdone${s.done?' checked':''}${ro} aria-label="「${esc(s.title)}」を完了にする">
       <input type="text" class="sin" id="sn-${tid}-${esc(s.id)}" value="${esc(s.title)}" maxlength="120" aria-label="サブタスク名"${ro?' readonly':''}>
+      ${s.done&&s.doneAt?`<span class="sdone mono" title="完了にした日時">${fmtAt(s.doneAt)} 完了</span>`:''}
       ${S.readOnly?'':`<button type="button" class="icon-btn" data-subdel aria-label="「${esc(s.title)}」を削除">削除</button>`}
     </li>`).join('');
   return `<div class="subs">
@@ -703,6 +705,7 @@ function subsHTML(t){
 const cmtsOf=t=>Array.isArray(t.comments)?t.comments:[];
 /* status history: task.statusLog = [{from, to, at, auto?}] (from=null when the task was created or copied) */
 const logOf=t=>Array.isArray(t.statusLog)?t.statusLog:[];
+const subLogOf=t=>Array.isArray(t.subLog)?t.subLog:[];
 function statusPatch(t,to,auto){
   if(!t||t.status===to)return {};
   const e={from:t.status||null,to,at:Date.now()};if(auto)e.auto=true;
@@ -723,8 +726,9 @@ function fmtAt(ms){const d=new Date(ms);const y=d.getFullYear()!==new Date().get
 function cmtsHTML(t){
   if(!openCmts.has(t.id))return '';
   const tid=esc(t.id);
-  const evs=[...cmtsOf(t).map(c=>({...c,_k:'c'})),...logOf(t).map(e=>({...e,_k:'s'}))].sort((a,b)=>(b.at||0)-(a.at||0));
+  const evs=[...cmtsOf(t).map(c=>({...c,_k:'c'})),...logOf(t).map(e=>({...e,_k:'s'})),...subLogOf(t).map(e=>({...e,_k:'u'}))].sort((a,b)=>(b.at||0)-(a.at||0));
   const items=evs.map(c=>{
+    if(c._k==='u')return `<li class="slog"><span class="mono">${fmtAt(c.at||0)}</span><span class="sl">サブタスク「${esc(c.title)}」を<span class="sp ${c.done?'st-done':'st-todo'}" style="margin-left:4px">${c.done?'完了':'未完了に戻した'}</span></span></li>`;
     if(c._k==='s')return `<li class="slog"><span class="mono">${fmtAt(c.at||0)}</span><span class="sl">${logLine(c)}</span></li>`;
     const editing=cEdit&&cEdit.tid===t.id&&cEdit.cid===c.id;
     return `<li class="cmt" data-cid="${esc(c.id)}">
@@ -785,7 +789,12 @@ function writeSubs(id,fn){
   const run=async()=>{const t=S.tasks.find(x=>x.id===id);if(!t)return;const next=fn(subsOf(t).map(s=>({...s})));if(!next)return;
     // parent follows its subtasks: all done -> 完了; reopened while 完了 -> 遂行中
     const allDone=next.length>0&&next.every(s=>s.done);
+    // subtask completion times: doneAt on the subtask + an entry in task.subLog for each check / uncheck
+    const prevById=Object.fromEntries(subsOf(t).map(s=>[s.id,s]));const now=Date.now();const slog=[];
+    for(const s of next){const pv=prevById[s.id];if(!pv||!!pv.done===!!s.done)continue;
+      if(s.done)s.doneAt=now;else delete s.doneAt;slog.push({sid:s.id,title:s.title,done:!!s.done,at:now})}
     const data={subtasks:next};let msg='';
+    if(slog.length)data.subLog=[...subLogOf(t),...slog].slice(-300);
     if(allDone&&t.status!=='done'){Object.assign(data,statusPatch(t,'done',true));msg=`サブタスクがすべて完了したため「${t.title}」を完了にしました`}
     else if(!allDone&&next.length&&t.status==='done'){Object.assign(data,statusPatch(t,'doing',true));msg=`未完了のサブタスクがあるため「${t.title}」を遂行中に戻しました`}
     else if(!allDone&&(t.status==='todo'||t.status==='hold')&&next.filter(s=>s.done).length>subsOf(t).filter(s=>s.done).length){
