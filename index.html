@@ -216,6 +216,16 @@ label.f{display:grid;gap:4px;font-size:.78rem;color:var(--muted)}
 .cbtns .btn{min-height:32px;padding:4px 14px;font-size:.85rem}
 .cnone{margin:0;color:var(--muted);font-size:.85rem}
 
+.sp{display:inline-block;background:var(--cb);color:var(--c);border-radius:999px;padding:0 8px;font-size:.74rem;font-weight:700;line-height:1.6;white-space:nowrap}
+.arr{color:var(--muted);margin:0 5px}
+.lt{font-size:.72rem;color:var(--muted);margin-left:6px}
+.lf{display:grid;gap:4px;font-size:.78rem;color:var(--muted)}
+.lf .hlist{color:var(--fg)}
+.slist{max-height:180px}
+.slist .n{display:flex;flex-wrap:wrap;align-items:center;gap:2px 0}
+.slog{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;padding:2px 10px;font-size:.78rem;color:var(--muted)}
+.slog .sl{display:inline-flex;flex-wrap:wrap;align-items:center}
+
 /* view switch */
 .tb-r{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
 .seg{display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden;background:var(--surface)}
@@ -365,6 +375,7 @@ details.jpl summary{cursor:pointer;font-size:.85rem;color:var(--muted)}
       <label class="f">終了日<input class="in mono" type="date" id="ed-end"></label>
     </div>
     <label class="f">メモ<textarea class="in" id="ed-note" maxlength="2000"></textarea></label>
+    <div class="lf"><span>ステータスの履歴</span><ul class="hlist slist" id="ed-log"></ul></div>
     <p class="err" id="ed-err"></p>
     <div class="dlg-f">
       <button type="button" class="btn warn" id="ed-del">削除</button>
@@ -690,6 +701,18 @@ function subsHTML(t){
   </div>`;
 }
 const cmtsOf=t=>Array.isArray(t.comments)?t.comments:[];
+/* status history: task.statusLog = [{from, to, at, auto?}] (from=null when the task was created or copied) */
+const logOf=t=>Array.isArray(t.statusLog)?t.statusLog:[];
+function statusPatch(t,to,auto){
+  if(!t||t.status===to)return {};
+  const e={from:t.status||null,to,at:Date.now()};if(auto)e.auto=true;
+  return {status:to,statusLog:[...logOf(t),e].slice(-300)};
+}
+const spill=k=>`<span class="sp st-${k}">${SL[k]||k}</span>`;
+function logLine(e){
+  return e.from?`${spill(e.from)}<span class="arr" aria-label="から">→</span>${spill(e.to)}${e.auto?'<span class="lt">サブタスク連動</span>':''}`
+    :`${e.copy?'複製して作成':'作成'}<span class="lt">（${SL[e.to]||e.to}）</span>`;
+}
 const CICON='<svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>';
 function cmtChip(t){
   const c=cmtsOf(t),open=openCmts.has(t.id);
@@ -700,7 +723,9 @@ function fmtAt(ms){const d=new Date(ms);const y=d.getFullYear()!==new Date().get
 function cmtsHTML(t){
   if(!openCmts.has(t.id))return '';
   const tid=esc(t.id);
-  const items=[...cmtsOf(t)].sort((a,b)=>(b.at||0)-(a.at||0)).map(c=>{
+  const evs=[...cmtsOf(t).map(c=>({...c,_k:'c'})),...logOf(t).map(e=>({...e,_k:'s'}))].sort((a,b)=>(b.at||0)-(a.at||0));
+  const items=evs.map(c=>{
+    if(c._k==='s')return `<li class="slog"><span class="mono">${fmtAt(c.at||0)}</span><span class="sl">${logLine(c)}</span></li>`;
     const editing=cEdit&&cEdit.tid===t.id&&cEdit.cid===c.id;
     return `<li class="cmt" data-cid="${esc(c.id)}">
       <div class="cmt-h"><span class="mono">${fmtAt(c.at||0)}</span>${c.editedAt?'<span class="ed">（編集済み）</span>':''}
@@ -717,7 +742,7 @@ function rowHTML(t){
   const m=meta(t);
   return `<li class="task st-${t.status}${t.status==='done'?' is-done':''}" data-id="${esc(t.id)}">
     ${S.readOnly?'<span></span>':`<button type="button" class="grip" data-grip="task" aria-label="「${esc(t.title)}」をドラッグして並べ替え（上下キーでも移動できます）"><svg width="10" height="16" viewBox="0 0 10 16" aria-hidden="true"><g fill="currentColor"><circle cx="2.5" cy="3" r="1.4"/><circle cx="7.5" cy="3" r="1.4"/><circle cx="2.5" cy="8" r="1.4"/><circle cx="7.5" cy="8" r="1.4"/><circle cx="2.5" cy="13" r="1.4"/><circle cx="7.5" cy="13" r="1.4"/></g></svg></button>`}
-    <select class="stsel st-${t.status}" data-status aria-label="ステータス"${S.readOnly?' disabled':''}>${statusOpts(t.status)}</select>
+    <select class="stsel st-${t.status}" data-status aria-label="ステータス"${(()=>{const l=logOf(t);return l.length?` title="${SL[t.status]}にした日時：${fmtAt(l[l.length-1].at)}"`:''})()}${S.readOnly?' disabled':''}>${statusOpts(t.status)}</select>
     <div class="t-main">
       <button type="button" class="t-title" data-edit>${esc(t.title)}</button>
       <div class="t-meta">${m.html}${subChip(t)}${cmtChip(t)}</div>
@@ -744,7 +769,7 @@ $('qa').addEventListener('submit',async e=>{
   const title=$('qa-title').value.trim();if(!title)return;
   const start=$('qa-start').value,end=$('qa-end').value;
   if(start&&end&&end<start){toast('終了日は着手日以降の日付にしてください。');return}
-  const data={title,groupId:$('qa-group').value||null,start:start||'',end:end||'',status:'todo',note:'',createdAt:Date.now(),order:Date.now()};
+  const data={title,groupId:$('qa-group').value||null,start:start||'',end:end||'',status:'todo',note:'',createdAt:Date.now(),order:Date.now(),statusLog:[{from:null,to:'todo',at:Date.now()}]};
   try{await put('tasks','t'+uid(),data);$('qa-title').value='';$('qa-start').value='';$('qa-end').value='';$('qa-title').focus();toast('タスクを追加しました')}catch(_){}
 });
 $('gadd').addEventListener('submit',async e=>{
@@ -761,10 +786,10 @@ function writeSubs(id,fn){
     // parent follows its subtasks: all done -> 完了; reopened while 完了 -> 遂行中
     const allDone=next.length>0&&next.every(s=>s.done);
     const data={subtasks:next};let msg='';
-    if(allDone&&t.status!=='done'){data.status='done';msg=`サブタスクがすべて完了したため「${t.title}」を完了にしました`}
-    else if(!allDone&&next.length&&t.status==='done'){data.status='doing';msg=`未完了のサブタスクがあるため「${t.title}」を遂行中に戻しました`}
+    if(allDone&&t.status!=='done'){Object.assign(data,statusPatch(t,'done',true));msg=`サブタスクがすべて完了したため「${t.title}」を完了にしました`}
+    else if(!allDone&&next.length&&t.status==='done'){Object.assign(data,statusPatch(t,'doing',true));msg=`未完了のサブタスクがあるため「${t.title}」を遂行中に戻しました`}
     else if(!allDone&&(t.status==='todo'||t.status==='hold')&&next.filter(s=>s.done).length>subsOf(t).filter(s=>s.done).length){
-      data.status='doing';msg=`サブタスクに着手したため「${t.title}」を遂行中にしました`}
+      Object.assign(data,statusPatch(t,'doing',true));msg=`サブタスクに着手したため「${t.title}」を遂行中にしました`}
     if(S.mode==='db')Object.assign(t,data); // show immediately; snapshot confirms
     render();await patch('tasks',id,data);if(msg)toast(msg);};
   queues[id]=(queues[id]||Promise.resolve()).then(run).catch(()=>{render()});
@@ -835,8 +860,8 @@ $('list').addEventListener('change',async e=>{
   if(cb){const id=cb.closest('.task').dataset.id,sid=cb.closest('.sub').dataset.sid,v=cb.checked;
     writeSubs(id,arr=>arr.map(x=>x.id===sid?{...x,done:v}:x));return}
   const sel=e.target.closest('[data-status]');if(!sel)return;
-  const id=sel.closest('.task').dataset.id;
-  try{await patch('tasks',id,{status:sel.value});toast(`ステータスを「${SL[sel.value]}」にしました`)}catch(_){render()}
+  const id=sel.closest('.task').dataset.id;const t0=S.tasks.find(x=>x.id===id);
+  try{await patch('tasks',id,statusPatch(t0,sel.value));toast(`ステータスを「${SL[sel.value]}」にしました`)}catch(_){render()}
 });
 $('list').addEventListener('click',e=>{
   const tg=e.target.closest('[data-toggle]');
@@ -859,6 +884,9 @@ function openTask(id){
   $('ed-title').value=t.title||'';$('ed-group').innerHTML=groupOpts(t.groupId);
   $('ed-status').value=t.status;$('ed-start').value=t.start||'';$('ed-end').value=t.end||'';$('ed-note').value=t.note||'';
   $('ed-err').textContent='';disarm($('ed-del'));
+  const lg=[...logOf(t)].reverse();
+  $('ed-log').innerHTML=lg.length?lg.map(e=>`<li><span class="d">${fmtAt(e.at)}</span><span class="n">${logLine(e)}</span></li>`).join('')
+    :'<li class="none">まだ記録はありません。この機能を追加する前の変更は記録されていません。</li>';
   $('ed-form').querySelectorAll('input,select,textarea,button[type=submit],#ed-del').forEach(x=>x.disabled=S.readOnly);
   $('ed').hidden=false;$('ed-title').focus();
 }
@@ -870,7 +898,8 @@ $('ed-form').addEventListener('submit',async e=>{
   const title=$('ed-title').value.trim(),start=$('ed-start').value,end=$('ed-end').value;
   if(!title){$('ed-err').textContent='タスク名を入力してください。';return}
   if(start&&end&&end<start){$('ed-err').textContent='終了日は着手日以降の日付にしてください。';return}
-  try{await patch('tasks',edId,{title,groupId:$('ed-group').value||null,status:$('ed-status').value,start,end,note:$('ed-note').value.trim()});closeTask();toast('保存しました')}catch(_){}
+  const t0=S.tasks.find(x=>x.id===edId);
+  try{await patch('tasks',edId,{title,groupId:$('ed-group').value||null,start,end,note:$('ed-note').value.trim(),...statusPatch(t0,$('ed-status').value)});closeTask();toast('保存しました')}catch(_){}
 });
 function disarm(b){b.classList.remove('armed');b.textContent='削除'}
 async function doDeleteTask(id){try{await remove('tasks',id);toast('タスクを削除しました')}catch(_){}}
@@ -1059,7 +1088,7 @@ $('hd-list').addEventListener('click',async e=>{
 function cloneTask(t,reset,extra){
   const subs=subsOf(t).map(s=>({id:'s'+uid(),title:s.title,done:reset?false:!!s.done}));
   return {title:t.title,groupId:t.groupId||null,start:t.start||'',end:t.end||'',note:t.note||'',
-    status:reset?'todo':t.status,subtasks:subs,createdAt:Date.now(),...extra};
+    status:reset?'todo':t.status,subtasks:subs,createdAt:Date.now(),statusLog:[{from:null,to:reset?'todo':t.status,at:Date.now(),copy:true}],...extra};
 }
 async function addTask(data){
   const id='t'+uid();await put('tasks',id,data);
