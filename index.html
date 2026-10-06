@@ -173,6 +173,18 @@ label.f{display:grid;gap:4px;font-size:.78rem;color:var(--muted)}
 .menu .danger.armed small{color:inherit}
 .menu hr{border:0;border-top:1px solid var(--line);margin:3px 4px}
 
+.gitem{display:flex;align-items:center;gap:2px;border-radius:6px;position:relative}
+.gitem .gbtn{flex:1;min-width:0}
+.rgrip{margin:0;padding:6px 2px;width:16px;opacity:0}
+.gitem.arch .rgrip{margin-left:10px}
+.gitem.arch .gbtn.arch{padding-left:10px}
+.rkebab{width:28px;height:28px;opacity:0}
+.gitem:hover .rgrip,.gitem:focus-within .rgrip{opacity:.55}
+.gitem:hover .rkebab,.gitem:focus-within .rkebab,.rkebab[aria-expanded="true"]{opacity:1}
+.rgrip:hover,.rgrip:focus-visible{opacity:1!important}
+@media (hover:none){.rgrip{opacity:.55}.rkebab{opacity:1}}
+.gitem.drag-ph{border-width:2px;height:34px}
+.gitem.moved{animation:moved 1.2s ease-out}
 .arch-h{margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
 .achev{width:11px;margin-left:2px;transform:rotate(-90deg)}
 [aria-expanded="true"]>.achev{transform:none}
@@ -302,6 +314,10 @@ details.jpl summary{cursor:pointer;font-size:.85rem;color:var(--muted)}
   .gbtn .nm{overflow:visible}
   .arch-h{margin:0;padding:0;border:0}
   .gbtn.arch{padding-left:12px}
+  .gitem .rgrip{display:none}
+  .gitem .rkebab{display:none}
+  .gitem .gbtn[aria-current="true"]+.rkebab{display:grid;opacity:1}
+  .gitem.arch .gbtn.arch{padding-left:12px}
   .qa{grid-template-columns:1fr 1fr}
   .qa .f-title{grid-column:1/-1}
   .qa .btn{grid-column:1/-1}
@@ -627,7 +643,7 @@ function render(){
   // groups rail
   const gAll=groupsSorted(),gl=gAll.filter(g=>!g.archived),ga=gAll.filter(g=>g.archived);
   const hasNone=S.tasks.some(t=>gOf(t)===NOGROUP);
-  const gli=g=>`<li><button type="button" class="gbtn${g.archived?' arch':''}" data-fg="${esc(g.id)}" aria-current="${S.fg===g.id}"><span class="swatch" style="--gc:${gColor(g)}"></span><span class="nm">${esc(g.name)}</span><span class="c">${S.tasks.filter(t=>t.groupId===g.id).length}</span></button></li>`;
+  const gli=g=>`<li class="gitem${g.archived?' arch':''}" data-gid="${esc(g.id)}" data-set="${g.archived?'a':'n'}">${S.readOnly?'':`<button type="button" class="grip rgrip" data-rgrip aria-label="グループ「${esc(g.name)}」をドラッグして並べ替え（上下キーでも移動できます）"><svg width="10" height="16" viewBox="0 0 10 16" aria-hidden="true"><g fill="currentColor"><circle cx="2.5" cy="3" r="1.4"/><circle cx="7.5" cy="3" r="1.4"/><circle cx="2.5" cy="8" r="1.4"/><circle cx="7.5" cy="8" r="1.4"/><circle cx="2.5" cy="13" r="1.4"/><circle cx="7.5" cy="13" r="1.4"/></g></svg></button>`}<button type="button" class="gbtn${g.archived?' arch':''}" data-fg="${esc(g.id)}" aria-current="${S.fg===g.id}"><span class="swatch" style="--gc:${gColor(g)}"></span><span class="nm">${esc(g.name)}</span><span class="c">${S.tasks.filter(t=>t.groupId===g.id).length}</span></button><button type="button" class="kebab rkebab" data-menu="group" data-mid="${esc(g.id)}" aria-haspopup="menu" aria-expanded="false" aria-label="グループ「${esc(g.name)}」のメニュー"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="3" cy="8" r="1.5" fill="currentColor"/><circle cx="8" cy="8" r="1.5" fill="currentColor"/><circle cx="13" cy="8" r="1.5" fill="currentColor"/></svg></button></li>`;
   let rail=`<li><button type="button" class="gbtn" data-fg="all" aria-current="${S.fg==='all'}"><span class="swatch" style="--gc:var(--fg)"></span><span class="nm">すべて</span><span class="c">${S.tasks.filter(t=>!isArch(t.groupId)).length}</span></button></li>`;
   rail+=gl.map(gli).join('');
   const archOpen=S.archOpen||isArch(S.fg);
@@ -761,7 +777,8 @@ function rowHTML(t){
 
 /* ---------- events ---------- */
 $('stats').addEventListener('click',e=>{const b=e.target.closest('[data-fs]');if(!b)return;S.fs=b.dataset.fs;render()});
-$('glist').addEventListener('click',e=>{const b=e.target.closest('[data-fg]');if(!b)return;
+$('glist').addEventListener('click',e=>{const mb=e.target.closest('[data-menu]');if(mb){openMenu(mb);return}
+  const b=e.target.closest('[data-fg]');if(!b)return;
   const v=b.dataset.fg;
   // アーカイブ: first click opens it; clicking it again while it is shown folds the list of archived groups
   if(v===ARCH){S.archOpen=S.fg===ARCH?!S.archOpen:true;LS.set('tl-archopen',S.archOpen)}
@@ -1166,7 +1183,7 @@ function moveGroup(id,prevId,nextId){
 }
 let flashId=null;
 const _render=render;
-render=function(){_render();if(flashId){const el=flashId.kind==='task'?document.querySelector(`.task[data-id="${CSS.escape(flashId.id)}"]`):document.querySelector(`.sec[data-gid="${CSS.escape(flashId.id)}"]`);if(el)el.classList.add('moved');flashId=null}};
+render=function(){_render();if(flashId){const q=CSS.escape(flashId.id);const els=flashId.kind==='task'?document.querySelectorAll(`.task[data-id="${q}"]`):document.querySelectorAll(`.sec[data-gid="${q}"],.gitem[data-gid="${q}"]`);els.forEach(el=>el.classList.add('moved'));flashId=null}};
 
 let drag=null;
 $('list').addEventListener('pointerdown',e=>{
@@ -1267,6 +1284,50 @@ $('list').addEventListener('keydown',e=>{
     moveGroup(sec.dataset.gid,rest[j-1]||null,rest[j]||null);
     const nb=document.querySelector(`.sec[data-gid="${CSS.escape(sec.dataset.gid)}"] [data-grip]`);nb&&nb.focus();
   }
+});
+
+/* rail (left column): drag a group by its grip, or ↑/↓ on the grip; archived and active groups reorder among themselves */
+let rdrag=null;
+const railItems=set=>[...$('glist').querySelectorAll(`.gitem[data-set="${set}"]`)];
+$('glist').addEventListener('pointerdown',e=>{
+  const h=e.target.closest('[data-rgrip]');if(!h||S.readOnly||e.button>0)return;e.preventDefault();
+  const el=h.closest('.gitem');rdrag={el,h,pid:e.pointerId,y0:e.clientY,y:e.clientY,started:false,set:el.dataset.set};
+  try{h.setPointerCapture(e.pointerId)}catch(_){}
+});
+$('glist').addEventListener('pointermove',e=>{
+  const d=rdrag;if(!d||e.pointerId!==d.pid)return;d.y=e.clientY;
+  if(!d.started){if(Math.abs(d.y-d.y0)<4)return;
+    d.started=true;closeMenu(false);const r=d.el.getBoundingClientRect();
+    d.ghost=d.el.cloneNode(true);d.ghost.classList.add('drag-ghost');Object.assign(d.ghost.style,{width:r.width+'px',left:r.left+'px',top:r.top+'px',display:'flex'});
+    d.off=d.y0-r.top;document.body.appendChild(d.ghost);
+    d.ph=document.createElement('li');d.ph.className='drag-ph gitem';d.el.parentNode.insertBefore(d.ph,d.el);d.el.hidden=true;
+    document.documentElement.classList.add('dragging');}
+  e.preventDefault();d.ghost.style.top=(d.y-d.off)+'px';
+  const items=railItems(d.set).filter(x=>x!==d.el);
+  const before=items.find(x=>{const r=x.getBoundingClientRect();return d.y<r.top+r.height/2});
+  if(before)before.parentNode.insertBefore(d.ph,before);else if(items.length){const last=items[items.length-1];last.parentNode.insertBefore(d.ph,last.nextSibling)}
+});
+function endRailDrag(commit){
+  const d=rdrag;rdrag=null;if(!d)return;try{d.h.releasePointerCapture(d.pid)}catch(_){}
+  if(!d.started)return;
+  d.ghost.remove();document.documentElement.classList.remove('dragging');
+  const sib=dir=>{let x=d.ph[dir];while(x&&!(x.classList&&x.classList.contains('gitem')&&x!==d.el&&x.dataset.set===d.set&&!x.classList.contains('drag-ph')))x=x[dir];return x};
+  const pv=sib('previousElementSibling'),nx=sib('nextElementSibling');
+  d.ph.remove();d.el.hidden=false;
+  const ids=railItems(d.set).map(x=>x.dataset.gid),id=d.el.dataset.gid,i=ids.indexOf(id);
+  const prev=pv&&pv.dataset.gid||null,next=nx&&nx.dataset.gid||null;
+  if(!commit||((ids[i-1]||null)===prev&&(ids[i+1]||null)===next)){render();return}
+  moveGroup(id,prev,next);
+}
+$('glist').addEventListener('pointerup',e=>{if(rdrag&&e.pointerId===rdrag.pid)endRailDrag(true)});
+$('glist').addEventListener('pointercancel',e=>{if(rdrag&&e.pointerId===rdrag.pid)endRailDrag(false)});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&rdrag&&rdrag.started){e.stopPropagation();endRailDrag(false)}},true);
+$('glist').addEventListener('keydown',e=>{
+  const h=e.target.closest('[data-rgrip]');if(!h||S.readOnly||(e.key!=='ArrowUp'&&e.key!=='ArrowDown'))return;e.preventDefault();
+  const el=h.closest('.gitem'),ids=railItems(el.dataset.set).map(x=>x.dataset.gid),i=ids.indexOf(el.dataset.gid),j=e.key==='ArrowUp'?i-1:i+1;
+  if(j<0||j>=ids.length)return;const rest=ids.filter(x=>x!==el.dataset.gid);
+  moveGroup(el.dataset.gid,rest[j-1]||null,rest[j]||null);
+  const nb=document.querySelector(`.gitem[data-gid="${CSS.escape(el.dataset.gid)}"] [data-rgrip]`);nb&&nb.focus();
 });
 
 /* ---------- ⋯ menu ---------- */
