@@ -11,6 +11,7 @@
   --done:#2c7a4c; --done-bg:#dcf0e3; --hold:#9a620b; --hold-bg:#f6ebd3;
   --g0:#1c5a78; --g1:#2c7a4c; --g2:#b4541f; --g3:#8a3f78; --g4:#7a6a12; --g5:#3f4f9a;
   --shadow:0 10px 30px rgba(20,40,55,.16);
+  --gb-doing:#1f6fd1; --gb-doing-fg:#ffffff; --gb-hold:#f0a531; --gb-hold-fg:#3b2600; --gb-todo-bd:#3e4c56; --gb-todo-fg:#15222a;
   --f-body:"Zen Kaku Gothic New","Hiragino Sans","Yu Gothic UI","Meiryo",system-ui,sans-serif;
   --f-mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
   --r:8px;
@@ -20,12 +21,14 @@
   --accent:#72b4d6; --accent-fg:#0a141a; --danger:#f08a80; --danger-bg:#3a1f1d;
   --todo:#a5b2ba; --todo-bg:#26323a; --doing:#82bbea; --doing-bg:#172f46; --done:#80d0a0; --done-bg:#17362a; --hold:#e4b464; --hold-bg:#382c16;
   --g0:#72b4d6; --g1:#80d0a0; --g2:#eb9a6a; --g3:#d494c4; --g4:#d6c46a; --g5:#9aa8ec;
+  --gb-doing:#3d8be8; --gb-doing-fg:#ffffff; --gb-hold:#e6a43c; --gb-hold-fg:#1f1400; --gb-todo-bd:#b8c6ce; --gb-todo-fg:#e2e9ec;
   --shadow:0 10px 30px rgba(0,0,0,.45); color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#10171b; --surface:#172026; --surface-2:#1e2a31; --fg:#e2e9ec; --muted:#93a3ab; --line:#2b3942;
   --accent:#72b4d6; --accent-fg:#0a141a; --danger:#f08a80; --danger-bg:#3a1f1d;
   --todo:#a5b2ba; --todo-bg:#26323a; --doing:#82bbea; --doing-bg:#172f46; --done:#80d0a0; --done-bg:#17362a; --hold:#e4b464; --hold-bg:#382c16;
   --g0:#72b4d6; --g1:#80d0a0; --g2:#eb9a6a; --g3:#d494c4; --g4:#d6c46a; --g5:#9aa8ec;
+  --gb-doing:#3d8be8; --gb-doing-fg:#ffffff; --gb-hold:#e6a43c; --gb-hold-fg:#1f1400; --gb-todo-bd:#b8c6ce; --gb-todo-fg:#e2e9ec;
   --shadow:0 10px 30px rgba(0,0,0,.45); color-scheme:dark}
 
 *{box-sizing:border-box}
@@ -307,6 +310,21 @@ details.jpl summary{cursor:pointer;font-size:.85rem;color:var(--muted)}
 .gbar.over{border-color:var(--danger);box-shadow:inset 0 0 0 1px var(--danger)}
 .gbar.pt{width:14px!important;height:14px;top:11px;border-radius:3px;transform:rotate(45deg);margin-left:3px}
 .gbar:hover{filter:brightness(.96)}
+/* active statuses stand out: 遂行中 = solid blue, 保留 = amber with pause stripes, 未着手 = white bar with a strong outline */
+.gbar.st-doing{background:var(--gb-doing);border-color:var(--gb-doing)}
+.gbar.st-doing .pf{background:rgba(0,0,0,.22)}
+.gbar.st-doing .tx{color:var(--gb-doing-fg);font-weight:700}
+.gbar.st-hold{background:repeating-linear-gradient(135deg,var(--gb-hold) 0 6px,color-mix(in srgb,var(--gb-hold) 72%,var(--surface)) 6px 12px);border-color:var(--gb-hold)}
+.gbar.st-hold .pf{background:rgba(0,0,0,.14)}
+.gbar.st-hold .tx{color:var(--gb-hold-fg);font-weight:700}
+.gbar.st-todo{background:var(--surface);border:2px solid var(--gb-todo-bd)}
+.gbar.st-todo .pf{background:color-mix(in srgb,var(--gb-todo-bd) 18%,transparent)}
+.gbar.st-todo .tx{color:var(--gb-todo-fg);font-weight:700;line-height:16px}
+.gbar.over{border:2px solid var(--danger);box-shadow:none}
+.gbar.over .tx{line-height:16px}
+.glegend .st-doing i{background:var(--gb-doing)}
+.glegend .st-hold i{background:repeating-linear-gradient(135deg,var(--gb-hold) 0 3px,color-mix(in srgb,var(--gb-hold) 72%,var(--surface)) 3px 6px)}
+.glegend .st-todo i{background:var(--surface);box-shadow:inset 0 0 0 2px var(--gb-todo-bd)}
 /* completed tasks recede: grey bar, grey fill, muted struck-through label */
 .gbar.st-done{border-color:transparent;background:color-mix(in srgb,var(--muted) 18%,transparent);opacity:.6}
 .gbar.st-done .pf{background:color-mix(in srgb,var(--muted) 22%,transparent)}
