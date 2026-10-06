@@ -128,7 +128,13 @@ label.f{display:grid;gap:4px;font-size:.78rem;color:var(--muted)}
 .subchip .mini i{position:absolute;inset:0 auto 0 0;background:var(--done)}
 .subs{grid-column:3/-1;display:grid;gap:2px;margin:-2px 0 2px;padding:2px 0 4px 12px;border-left:2px solid var(--line)}
 .subs ul{list-style:none;margin:0;padding:0;display:grid;gap:1px}
-.sub{display:flex;align-items:center;gap:8px;min-width:0}
+.sub{display:flex;align-items:center;gap:8px;min-width:0;border-radius:6px}
+.sgrip{margin:0 -4px 0 -6px;padding:4px 3px;opacity:0}
+.sub:hover .sgrip,.sub:focus-within .sgrip{opacity:.55}
+.sgrip:hover,.sgrip:focus-visible{opacity:1!important}
+@media (hover:none){.sgrip{opacity:.55}}
+.sub.drag-ph{height:32px}
+.sub.moved{animation:moved 1.2s ease-out}
 .sub input[type=checkbox]{width:17px;height:17px;margin:0;flex:none;accent-color:var(--done);cursor:pointer}
 .sin{flex:1;min-width:0;border:1px solid transparent;background:none;padding:3px 6px;border-radius:4px;font-size:.9rem}
 .sin:hover{border-color:var(--line)}
@@ -708,6 +714,7 @@ function subsHTML(t){
   if(!openSubs.has(t.id))return '';
   const tid=esc(t.id);const ro=S.readOnly?' disabled':'';
   const items=subsOf(t).map(s=>`<li class="sub${s.done?' done':''}" data-sid="${esc(s.id)}">
+      ${S.readOnly||subsOf(t).length<2?'':`<button type="button" class="grip sgrip" data-sgrip aria-label="サブタスク「${esc(s.title)}」をドラッグして並べ替え（上下キーでも移動できます）"><svg width="8" height="14" viewBox="0 0 10 16" aria-hidden="true"><g fill="currentColor"><circle cx="2.5" cy="3" r="1.4"/><circle cx="7.5" cy="3" r="1.4"/><circle cx="2.5" cy="8" r="1.4"/><circle cx="7.5" cy="8" r="1.4"/><circle cx="2.5" cy="13" r="1.4"/><circle cx="7.5" cy="13" r="1.4"/></g></svg></button>`}
       <input type="checkbox" id="sc-${tid}-${esc(s.id)}" data-subdone${s.done?' checked':''}${ro} aria-label="「${esc(s.title)}」を完了にする">
       <input type="text" class="sin" id="sn-${tid}-${esc(s.id)}" value="${esc(s.title)}" maxlength="120" aria-label="サブタスク名"${ro?' readonly':''}>
       ${s.done&&s.doneAt?`<span class="sdone mono" title="完了にした日時">${fmtAt(s.doneAt)} 完了</span>`:''}
@@ -1329,6 +1336,52 @@ $('glist').addEventListener('keydown',e=>{
   moveGroup(el.dataset.gid,rest[j-1]||null,rest[j]||null);
   const nb=document.querySelector(`.gitem[data-gid="${CSS.escape(el.dataset.gid)}"] [data-rgrip]`);nb&&nb.focus();
 });
+
+/* subtasks: drag by the grip (or ↑/↓ on it) to reorder within the same task */
+let sdrag=null;let sflash=null;
+function moveSub(tid,sid,toIndex){
+  sflash=sid;writeSubs(tid,arr=>{const i=arr.findIndex(x=>x.id===sid);if(i<0||i===toIndex)return null;const [it]=arr.splice(i,1);arr.splice(toIndex,0,it);return arr});
+}
+$('list').addEventListener('pointerdown',e=>{
+  const h=e.target.closest('[data-sgrip]');if(!h||S.readOnly||e.button>0)return;e.preventDefault();e.stopPropagation();
+  const el=h.closest('.sub');sdrag={el,h,ul:el.parentNode,pid:e.pointerId,y0:e.clientY,y:e.clientY,started:false};
+  try{h.setPointerCapture(e.pointerId)}catch(_){}
+});
+$('list').addEventListener('pointermove',e=>{
+  const d=sdrag;if(!d||e.pointerId!==d.pid)return;d.y=e.clientY;
+  if(!d.started){if(Math.abs(d.y-d.y0)<4)return;
+    d.started=true;const r=d.el.getBoundingClientRect();
+    d.ghost=d.el.cloneNode(true);d.ghost.classList.add('drag-ghost');d.ghost.querySelectorAll('[id]').forEach(x=>x.removeAttribute('id'));
+    Object.assign(d.ghost.style,{width:r.width+'px',left:r.left+'px',top:r.top+'px',display:'flex',padding:'2px 6px'});
+    d.off=d.y0-r.top;document.body.appendChild(d.ghost);
+    d.ph=document.createElement('li');d.ph.className='drag-ph sub';d.ul.insertBefore(d.ph,d.el);d.el.hidden=true;
+    document.documentElement.classList.add('dragging');}
+  e.preventDefault();d.ghost.style.top=(d.y-d.off)+'px';
+  const items=[...d.ul.querySelectorAll(':scope>.sub:not(.drag-ph)')].filter(x=>x!==d.el);
+  const before=items.find(x=>{const r=x.getBoundingClientRect();return d.y<r.top+r.height/2});
+  if(before)d.ul.insertBefore(d.ph,before);else d.ul.appendChild(d.ph);
+});
+function endSubDrag(commit){
+  const d=sdrag;sdrag=null;if(!d)return;try{d.h.releasePointerCapture(d.pid)}catch(_){}
+  if(!d.started)return;
+  d.ghost.remove();document.documentElement.classList.remove('dragging');
+  const order=[...d.ul.children].filter(x=>x!==d.el&&x.classList.contains('sub'));
+  const to=order.indexOf(d.ph);d.ph.remove();d.el.hidden=false;
+  if(!commit||to<0){render();return}
+  moveSub(d.el.closest('.task').dataset.id,d.el.dataset.sid,to);
+}
+$('list').addEventListener('pointerup',e=>{if(sdrag&&e.pointerId===sdrag.pid)endSubDrag(true)});
+$('list').addEventListener('pointercancel',e=>{if(sdrag&&e.pointerId===sdrag.pid)endSubDrag(false)});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&sdrag&&sdrag.started){e.stopPropagation();endSubDrag(false)}},true);
+$('list').addEventListener('keydown',e=>{
+  const h=e.target.closest('[data-sgrip]');if(!h||S.readOnly||(e.key!=='ArrowUp'&&e.key!=='ArrowDown'))return;e.preventDefault();
+  const li=h.closest('.sub'),tid=li.closest('.task').dataset.id,t=S.tasks.find(x=>x.id===tid);if(!t)return;
+  const i=subsOf(t).findIndex(x=>x.id===li.dataset.sid),j=e.key==='ArrowUp'?i-1:i+1;if(j<0||j>=subsOf(t).length)return;
+  moveSub(tid,li.dataset.sid,j);
+  (queues[tid]||Promise.resolve()).then(()=>{const nb=document.querySelector(`.task[data-id="${CSS.escape(tid)}"] .sub[data-sid="${CSS.escape(li.dataset.sid)}"] [data-sgrip]`);nb&&nb.focus()});
+});
+const _render2=render;
+render=function(){_render2();if(sflash){const el=document.querySelector(`.sub[data-sid="${CSS.escape(sflash)}"]`);if(el){el.classList.add('moved');sflash=null}}};
 
 /* ---------- ⋯ menu ---------- */
 let menuCtx=null;
